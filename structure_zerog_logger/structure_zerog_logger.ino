@@ -1,37 +1,12 @@
-/* RFM69 library and code by Felix Rusu - felix@lowpowerlab.com
-// Get libraries at: https://github.com/LowPowerLab/
-// Make sure you adjust the settings in the configuration section below !!!
-// **********************************************************************************
-// Copyright Felix Rusu, LowPowerLab.com
-// Library and code by Felix Rusu - felix@lowpowerlab.com
-// **********************************************************************************
-// License
-// **********************************************************************************
-// This program is free software; you can redistribute it 
-// and/or modify it under the terms of the GNU General    
-// Public License as published by the Free Software       
-// Foundation; either version 3 of the License, or        
-// (at your option) any later version.                    
-//                                                        
-// This program is distributed in the hope that it will   
-// be useful, but WITHOUT ANY WARRANTY; without even the  
-// implied warranty of MERCHANTABILITY or FITNESS FOR A   
-// PARTICULAR PURPOSE. See the GNU General Public        
-// License for more details.                              
-//                                                        
-// You should have received a copy of the GNU General    
-// Public License along with this program.
-// If not, see <http://www.gnu.org/licenses></http:>.
-//                                                        
-// Licence can be viewed at                               
-// http://www.gnu.org/licenses/gpl-3.0.txt
-//
-// Please maintain this license information along with authorship
-// and copyright notices in any redistribution of this code
-// **********************************************************************************/
-
 #include <RFM69.h>    //get it here: https://www.github.com/lowpowerlab/rfm69
 #include <SPI.h>
+#include <Wire.h>
+#include "RTClib.h"
+#include <SD.h>
+//#include "SdFat.h"
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BNO055.h>
+#include <utility/imumaths.h>
 
 //*********************************************************************************************
 // *********** IMPORTANT SETTINGS - YOU MUST CHANGE/ONFIGURE TO FIT YOUR HARDWARE *************
@@ -55,16 +30,36 @@
 #define RFM69_IRQN    4  // Pin 7 is IRQ 4!
 #define RFM69_RST     4
 
-int16_t packetnum = 0;  // packet counter, we increment per xmission
+#define SD_CS         10
+#define VBATPIN       A9
+
+#define RECORD_INTERVAL 50 //ms
+
+Adafruit_BNO055 bno = Adafruit_BNO055();
+
+RTC_PCF8523 rtc;
+
+String dataString;
+
+bool sd_error = false;
+bool wireless_error = false;
+bool rtc_error = false;
+bool battery_error = false;
+bool accel_error = false;
+
+File dataFile;
+bool first_write = true;
+
+uint8_t led_r = 5;
+uint8_t led_g = 9;
+uint8_t led_b = 6;
+
+unsigned long last_check = 0;
+unsigned long last_time = 0;
 
 RFM69 radio = RFM69(RFM69_CS, RFM69_IRQ, IS_RFM69HCW, RFM69_IRQN);
 
-void setup() {
-  while (!Serial); // wait until serial console is open, remove if not tethered to computer. Delete this line on ESP8266
-  Serial.begin(SERIAL_BAUD);
-
-  Serial.println("#Feather RFM69HCW Receiver");
-  
+void resetRadio() {
   // Hard Reset the RFM module
   pinMode(RFM69_RST, OUTPUT);
   digitalWrite(RFM69_RST, HIGH);
@@ -86,26 +81,167 @@ void setup() {
   Serial.println(" MHz");
 }
 
+void writeToSD(String data) {
+  if (!sd_error) {
+//    File dataFile = SD.open("datalog.txt", FILE_WRITE);
+  
+    // if the file is available, write to it:
+    if (dataFile) {
+      sd_error = false;
+      dataFile.println(data);
+//      dataFile.close();
+    } else {
+      sd_error = true;
+      Serial.println("#SD-ERROR: problem opening file");
+    }
+  }
+}
+
+void measureBatteryVoltage() { 
+    float measuredvbat = 0;
+    measuredvbat = analogRead(VBATPIN);
+//    measuredvbat *= 2;    // we divided by 2, so multiply back
+    measuredvbat *= 3.3;  // Multiply by 3.3V, our reference voltage
+    measuredvbat /= 1024; // convert to voltage
+    if (measuredvbat < 3 && measuredvbat > 1) {
+      battery_error = true;
+      Serial.print("#VBat: " ); Serial.println(measuredvbat);
+    } else {
+      battery_error = false;
+    }
+}
+
+void displayStatus() {
+
+  if (sd_error | wireless_error | rtc_error | battery_error) {
+    // bad thing, steady red
+    digitalWrite(led_r, LOW);
+    digitalWrite(led_g, HIGH);
+    digitalWrite(led_b, HIGH);
+  } else {
+    //nominal, steady green
+    digitalWrite(led_r, HIGH);
+    digitalWrite(led_g, LOW);
+    digitalWrite(led_b, HIGH);
+  }
+  
+}
+
+void errorCheckandRecover() {
+  if (millis() - last_check > 5000) {
+    last_check = millis();
+    measureBatteryVoltage();
+    if (sd_error) {
+      Serial.println("#SD-ERROR: found error, looking to recover");
+      if (SD.begin(SD_CS)) {
+        Serial.println("#SD-ERROR: resolved");
+        sd_error = false;
+      }
+    }
+    if (rtc_error) {
+      Serial.println("#RTC-ERROR: found error, looking to recover");
+      if (rtc.begin()) {
+        Serial.println("#RTC-ERROR: resolved");
+        rtc_error = false;
+      }
+    }
+    if (wireless_error) {
+      Serial.println("#RADIO-ERROR: found error, looking to recover");
+      resetRadio();
+    }
+    if (battery_error) {
+      Serial.println("#BATTERY LOW!");
+    }
+    if (accel_error) {
+      Serial.println("#ACCEL-ERROR: found error, looking to recover");
+      if(bno.begin()) {
+        Serial.println("#ACCEL-ERROR: resolved");
+        accel_error = false;
+      }
+    }
+  }
+}
+
+void setup() {
+  while (!Serial); // wait until serial console is open, remove if not tethered to computer. Delete this line on ESP8266
+  Serial.begin(SERIAL_BAUD);
+
+  Serial.println("#Feather RFM69HCW Receiver");
+
+  pinMode(led_r, OUTPUT);
+  pinMode(led_g, OUTPUT);
+  pinMode(led_b, OUTPUT);
+  
+  resetRadio();
+
+  // initialize SD card
+  if (!SD.begin(SD_CS)) {
+    sd_error = true;
+  }
+
+  dataFile = SD.open("datalog.txt", FILE_WRITE);
+  
+  //begin RTC
+  if (!rtc.begin()) {
+    rtc_error = true;
+  }
+
+  // reset the RTC's time to the current time if it's not innitialized
+//  if (!rtc.initialized()) {
+//    Serial.println("RTC is NOT running!");
+//    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+//  }
+
+  // begin accelerometer
+  if(!bno.begin())
+  {
+    accel_error = true;
+  }
+}
+
 void loop() {
+  errorCheckandRecover();
+  displayStatus();
+  
+  // get time
+  DateTime now = rtc.now();
+  //format a data string
+  dataString = String(now.hour()) + ":" + String(now.minute()) + ":" + String(now.second());
+
+  // Possible vector values can be:
+  // - VECTOR_ACCELEROMETER - m/s^2
+  // - VECTOR_MAGNETOMETER  - uT
+  // - VECTOR_GYROSCOPE     - rad/s
+  // - VECTOR_EULER         - degrees
+  // - VECTOR_LINEARACCEL   - m/s^2
+  // - VECTOR_GRAVITY       - m/s^2
+
+  imu::Vector<3> linearAccel = bno.getVector(Adafruit_BNO055::VECTOR_LINEARACCEL);
+  imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
+
+  dataString += " #xyz: " + String(linearAccel.x()) + "," + String(linearAccel.y()) + "," + String(linearAccel.z()) + " #ypr: " + String(euler.x()) + "," + String(euler.y()) + "," + String(euler.z());
+
+//  if (millis()-last_time > RECORD_INTERVAL) {
+//    last_time = millis();
+//    //write to SD
+//    writeToSD(dataString);
+//    Serial.println(dataString);
+//  }
+    
+    
   //check if something was received (could be an interrupt from the radio)
   if (radio.receiveDone())
   {
     //print message received to serial
-    Serial.print('[');Serial.print(radio.SENDERID);Serial.print("] ");
+    Serial.print("#");Serial.print(radio.SENDERID);Serial.print(" ");
     Serial.print((char*)radio.DATA);
-    Serial.print("   [RX_RSSI:");Serial.print(radio.RSSI);Serial.print("]");
+    Serial.print(" #RX:");Serial.println(radio.RSSI);
 
-//    //check if received message contains Hello World
-//    if (strstr((char *)radio.DATA, "Hello World"))
-//    {
-      //check if sender wanted an ACK
     if (radio.ACKRequested())
     {
       radio.sendACK();
-      Serial.println(" - ACK sent");
+//      Serial.println(" - ACK sent");
     }
-//      Blink(LED, 40, 3); //blink LED 3 times, 40ms between blinks
-//    }  
   }
 
   radio.receiveDone(); //put radio in RX mode

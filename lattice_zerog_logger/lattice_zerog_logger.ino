@@ -51,8 +51,6 @@ uint8_t led_b = 6;
 
 unsigned long last_check = 0;
 
-int16_t packetnum = 0;  // packet counter, we increment per xmission
-
 RFM69 radio = RFM69(RFM69_CS, RFM69_IRQ, IS_RFM69HCW, RFM69_IRQN);
 
 void writeToSD(String data) {
@@ -189,12 +187,13 @@ void setup() {
     rtc_error = true;
   }
 
+// reset the RTC's time to the current time if it's not innitialized
 //  if (!rtc.initialized()) {
 //    Serial.println("RTC is NOT running!");
 //    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
 //  }
 
-  /* Initialise the accelerometer */
+  // begin accelerometer
   if(!bno.begin())
   {
     accel_error = true;
