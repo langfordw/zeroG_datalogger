@@ -81,15 +81,34 @@ void resetRadio() {
   Serial.println(" MHz");
 }
 
+void checkRadio() {
+  //check if something was received (could be an interrupt from the radio)
+  if (radio.receiveDone())
+  {
+    //print message received to serial
+    Serial.print("#");Serial.print(radio.SENDERID);Serial.print(" ");
+    Serial.print((char*)radio.DATA);
+    Serial.print(" #RX:");Serial.print(radio.RSSI);
+
+    if (radio.ACKRequested())
+    {
+      radio.sendACK();
+      Serial.println("A");
+    } else {
+      wireless_error=true;
+    }
+  }
+}
+
 void writeToSD(String data) {
   if (!sd_error) {
-//    File dataFile = SD.open("datalog.txt", FILE_WRITE);
+    File dataFile = SD.open("datalog.txt", FILE_WRITE);
   
     // if the file is available, write to it:
     if (dataFile) {
       sd_error = false;
       dataFile.println(data);
-//      dataFile.close();
+      dataFile.close();
     } else {
       sd_error = true;
       Serial.println("#SD-ERROR: problem opening file");
@@ -148,6 +167,7 @@ void errorCheckandRecover() {
     if (wireless_error) {
       Serial.println("#RADIO-ERROR: found error, looking to recover");
       resetRadio();
+      wireless_error = false;
     }
     if (battery_error) {
       Serial.println("#BATTERY LOW!");
@@ -221,29 +241,15 @@ void loop() {
 
   dataString += " #xyz: " + String(linearAccel.x()) + "," + String(linearAccel.y()) + "," + String(linearAccel.z()) + " #ypr: " + String(euler.x()) + "," + String(euler.y()) + "," + String(euler.z());
 
-//  if (millis()-last_time > RECORD_INTERVAL) {
-//    last_time = millis();
-//    //write to SD
-//    writeToSD(dataString);
-//    Serial.println(dataString);
-//  }
-    
-    
-  //check if something was received (could be an interrupt from the radio)
-  if (radio.receiveDone())
-  {
-    //print message received to serial
-    Serial.print("#");Serial.print(radio.SENDERID);Serial.print(" ");
-    Serial.print((char*)radio.DATA);
-    Serial.print(" #RX:");Serial.println(radio.RSSI);
-
-    if (radio.ACKRequested())
-    {
-      radio.sendACK();
-//      Serial.println(" - ACK sent");
-    }
+  //write to SD
+  if (millis()-last_time > RECORD_INTERVAL) {
+    last_time = millis();
+    writeToSD(dataString);
+    Serial.println(dataString);
   }
 
+  checkRadio();
+    
   radio.receiveDone(); //put radio in RX mode
   Serial.flush(); //make sure all serial data is clocked out before sleeping the MCU
 }
