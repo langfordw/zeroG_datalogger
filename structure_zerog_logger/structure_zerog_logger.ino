@@ -39,7 +39,7 @@ Adafruit_BNO055 bno = Adafruit_BNO055();
 
 RTC_PCF8523 rtc;
 
-String dataString;
+String dataString, dataString2;
 
 bool sd_error = false;
 bool wireless_error = false;
@@ -86,14 +86,19 @@ void checkRadio() {
   if (radio.receiveDone())
   {
     //print message received to serial
-    Serial.print("#");Serial.print(radio.SENDERID);Serial.print(" ");
-    Serial.print((char*)radio.DATA);
-    Serial.print(" #RX:");Serial.print(radio.RSSI);
+    dataString2 = "";
+    dataString2 = "#" + String(radio.SENDERID) + " ";
+    dataString2 += (char*)radio.DATA;
+    dataString2 += " #RX:" + String(radio.RSSI);
+    
+//    Serial.print("#");Serial.print(radio.SENDERID);Serial.print(" ");
+//    Serial.print((char*)radio.DATA);
+//    Serial.print(" #RX:");Serial.print(radio.RSSI);
 
     if (radio.ACKRequested())
     {
       radio.sendACK();
-      Serial.println("A");
+//      Serial.println("A");
     } else {
       wireless_error=true;
     }
@@ -103,7 +108,6 @@ void checkRadio() {
 void writeToSD(String data) {
   if (!sd_error) {
     File dataFile = SD.open("datalog.txt", FILE_WRITE);
-  
     // if the file is available, write to it:
     if (dataFile) {
       sd_error = false;
@@ -226,7 +230,7 @@ void loop() {
   // get time
   DateTime now = rtc.now();
   //format a data string
-  dataString = String(now.hour()) + ":" + String(now.minute()) + ":" + String(now.second());
+  dataString = "#1 " + String(now.hour()) + ":" + String(now.minute()) + ":" + String(now.second());
 
   // Possible vector values can be:
   // - VECTOR_ACCELEROMETER - m/s^2
@@ -241,15 +245,21 @@ void loop() {
 
   dataString += " #xyz: " + String(linearAccel.x()) + "," + String(linearAccel.y()) + "," + String(linearAccel.z()) + " #ypr: " + String(euler.x()) + "," + String(euler.y()) + "," + String(euler.z());
 
+  checkRadio();
+
+  radio.receiveDone(); //put radio in RX mode
+  
   //write to SD
   if (millis()-last_time > RECORD_INTERVAL) {
     last_time = millis();
+    noInterrupts();
     writeToSD(dataString);
+    interrupts();
     Serial.println(dataString);
+    if (dataString2 != "") {
+      Serial.println(dataString2);
+    }
   }
 
-  checkRadio();
-    
-  radio.receiveDone(); //put radio in RX mode
   Serial.flush(); //make sure all serial data is clocked out before sleeping the MCU
 }
