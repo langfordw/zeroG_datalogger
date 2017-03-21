@@ -1,0 +1,13 @@
+.scroll {
+	overflow-y:scroll;
+	width:300px;
+	height:200px;
+	position: absolute;
+}
+
+.scrollDiv {
+	display:inline-block;
+	position: relative;
+	width:300px;
+	height:200px;
+}

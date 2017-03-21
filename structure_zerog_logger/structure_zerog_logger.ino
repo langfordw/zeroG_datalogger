@@ -188,7 +188,7 @@ void errorCheckandRecover() {
 }
 
 void setup() {
-  while (!Serial); // wait until serial console is open, remove if not tethered to computer. Delete this line on ESP8266
+//  while (!Serial); // wait until serial console is open, remove if not tethered to computer. Delete this line on ESP8266
   Serial.begin(SERIAL_BAUD);
 
   Serial.println("#Feather RFM69HCW Receiver");
@@ -212,10 +212,10 @@ void setup() {
   }
 
   // reset the RTC's time to the current time if it's not innitialized
-//  if (!rtc.initialized()) {
-//    Serial.println("RTC is NOT running!");
-//    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-//  }
+  if (!rtc.initialized()) {
+    Serial.println("RTC is NOT running!");
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  }
 
   // begin accelerometer
   if(!bno.begin())

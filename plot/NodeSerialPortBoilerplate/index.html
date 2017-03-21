@@ -8,9 +8,10 @@
     <script type="text/javascript" src="dependencies/jquery-2.1.3.min.js"></script>
     <script type="text/javascript" src="dependencies/smoothie.js"></script>
 
-    <!-- // <script type="text/javascript" src="js/main.js"></script> -->
-    <script type="text/javascript" src="js/zeroG_main.js"></script>
+    <script type="text/javascript" src="js/main.js"></script>
     <script type="text/javascript" src="js/plotting.js"></script>
+
+    <link rel="stylesheet" href="style.css">
 
     <!--CHARTS:-->
     <!--http://smoothiecharts.org/-->
@@ -26,8 +27,15 @@
     Data: <span id="dataDisplay"></span><br/>
 </div>
 
-<!-- <body onload="createPlot()"> -->
-<!-- <canvas id="chart" width="800" height="600"></canvas> -->
+
+<div class="scrollDiv">
+<h2>Node1:</h2>
+<span id="serialMonitor" class="scroll"></span>
+</div>
+<div class="scrollDiv">
+<h2>Node2:</h2>
+<span id="serialMonitor2" class="scroll"></span>
+</div>
 
 </body>
 </html>

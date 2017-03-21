@@ -6,6 +6,9 @@
 $(function() {
 
     var socket = io.connect('http://localhost:8080');
+    var serialMonitor = document.getElementById("serialMonitor");
+    var serialMonitor2 = document.getElementById("serialMonitor2");
+    var stringBuffer1 = new Array(100);
 
     $("#refreshPorts").click(function(e){
         e.preventDefault();
@@ -55,11 +58,18 @@ $(function() {
 
     socket.on("dataIn", function(data){//oncoming serial data
         split_data = data.split(" ");
-        console.log(split_data)
+        // console.log(split_data)
         if (split_data[0] == "N1") {
         // console.log("data: " + data);
-            $("#dataDisplay").html(split_data[3]);
+            // $("#dataDisplay").html(split_data[3]);
+            stringBuffer1.pop();
+            stringBuffer1.unshift(split_data[3] + " " + split_data[5] + "<br>");
+            console.log(stringBuffer1)
+            // stringBuffer1.pop();
+            serialMonitor.innerHTML = stringBuffer1;
             // dataStream.append(new Date().getTime(), split_data[3].split(",")[0]);
+        } else if (split_data[0] == "N2") {
+            // serialMonitor2.innerHTML = split_data[3] + "<br>" + serialMonitor2.innerHTML;
         }
     });
 

@@ -198,10 +198,10 @@ void startup() {
   }
 
 // reset the RTC's time to the current time if it's not innitialized
-//  if (!rtc.initialized()) {
-//    Serial.println("RTC is NOT running!");
-//    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-//  }
+  if (!rtc.initialized()) {
+    Serial.println("RTC is NOT running!");
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  }
 
   // begin accelerometer
   if(!bno.begin())
