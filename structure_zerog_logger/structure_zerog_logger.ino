@@ -12,7 +12,8 @@
 // *********** IMPORTANT SETTINGS - YOU MUST CHANGE/ONFIGURE TO FIT YOUR HARDWARE *************
 //*********************************************************************************************
 #define NETWORKID     100  //the same on all nodes that talk to each other
-#define NODEID        1  
+#define NODEID        1 
+#define RECEIVER      2    // The recipient of packets 
 
 //Match frequency to the hardware version of the radio on your Feather
 //#define FREQUENCY     RF69_433MHZ
@@ -87,7 +88,7 @@ void checkRadio() {
   {
     //print message received to serial
     dataString2 = "";
-    dataString2 = "#" + String(radio.SENDERID) + " ";
+//    dataString2 = "N" + String(radio.SENDERID) + " ";
     dataString2 += (char*)radio.DATA;
     dataString2 += " #RX:" + String(radio.RSSI);
     
@@ -230,7 +231,7 @@ void loop() {
   // get time
   DateTime now = rtc.now();
   //format a data string
-  dataString = "#1 " + String(now.hour()) + ":" + String(now.minute()) + ":" + String(now.second());
+  dataString = "N" + String(NODEID) + " " + String(now.hour()) + ":" + String(now.minute()) + ":" + String(now.second());
 
   // Possible vector values can be:
   // - VECTOR_ACCELEROMETER - m/s^2
@@ -244,6 +245,19 @@ void loop() {
   imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
 
   dataString += " #xyz: " + String(linearAccel.x()) + "," + String(linearAccel.y()) + "," + String(linearAccel.z()) + " #ypr: " + String(euler.x()) + "," + String(euler.y()) + "," + String(euler.z());
+
+
+  if (Serial.available()) {
+    if (Serial.read() == 'r') {
+      char radiopacket = 'r';
+  
+      if (radio.sendWithRetry(RECEIVER, radiopacket, strlen(radiopacket))) { //target node Id, message as string or byte array, message length
+        Serial.println("OK"); // why isn't it printing this?
+      }
+      radio.receiveDone(); //put radio in RX mode
+    }
+  }
+  
 
   checkRadio();
 

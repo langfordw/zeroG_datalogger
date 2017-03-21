@@ -39,6 +39,12 @@ RTC_PCF8523 rtc;
 
 String dataString;
 
+//File dataFile;
+
+const uint8_t INIT = 1;
+const uint8_t NORMAL = 2;
+uint8_t STATE = NORMAL;
+
 bool sd_error = false;
 bool wireless_error = false;
 bool rtc_error = false;
@@ -50,6 +56,10 @@ uint8_t led_g = 9;
 uint8_t led_b = 6;
 
 unsigned long last_check = 0;
+
+bool watchdog_enable = true;
+bool watchdog_triggered = false;
+bool watchdog_timeout = 4000;
 
 RFM69 radio = RFM69(RFM69_CS, RFM69_IRQ, IS_RFM69HCW, RFM69_IRQN);
 
@@ -149,7 +159,7 @@ void errorCheckandRecover() {
   }
 }
 
-void setup() {
+void startup() {
   Serial.begin(SERIAL_BAUD);
   Serial.println("Feather RFM69HCW Transmitter");
 
@@ -179,7 +189,7 @@ void setup() {
 
   // initialize SD card
   if (!SD.begin(SD_CS)) {
-    sd_error = true;
+//    sd_error = true;
   }
 
   //begin RTC
@@ -200,43 +210,101 @@ void setup() {
   }
 }
 
-void loop() {
-  
-  errorCheckandRecover();
-  displayStatus();
-  
-  // get time
-  DateTime now = rtc.now();
-  //format a data string
-  dataString = String(now.hour()) + ":" + String(now.minute()) + ":" + String(now.second());
-  
-  // Possible vector values can be:
-  // - VECTOR_ACCELEROMETER - m/s^2
-  // - VECTOR_MAGNETOMETER  - uT
-  // - VECTOR_GYROSCOPE     - rad/s
-  // - VECTOR_EULER         - degrees
-  // - VECTOR_LINEARACCEL   - m/s^2
-  // - VECTOR_GRAVITY       - m/s^2
-  
-  imu::Vector<3> linearAccel = bno.getVector(Adafruit_BNO055::VECTOR_LINEARACCEL);
-  imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
 
-  dataString += " #xyz: " + String(linearAccel.x()) + "," + String(linearAccel.y()) + "," + String(linearAccel.z()) + " #ypr: " + String(euler.x()) + "," + String(euler.y()) + "," + String(euler.z());
-
-  //write to SD
-  writeToSD(dataString);
-  Serial.println(dataString);
+void checkRadio() {
+  //check if something was received (could be an interrupt from the radio)
+  if (radio.receiveDone())
+  {
+      Serial.print("received: ");
+      Serial.println((char*)radio.DATA);
+//    //print message received to serial
+//    dataString2 = "";
+//    dataString2 = "#" + String(radio.SENDERID) + " ";
+//    dataString2 += (char*)radio.DATA;
+//    dataString2 += " #RX:" + String(radio.RSSI);
     
-  char radiopacket[60];
-  dataString.toCharArray(radiopacket,60);//"Hello World #";
-  
-  if (radio.sendWithRetry(RECEIVER, radiopacket, strlen(radiopacket))) { //target node Id, message as string or byte array, message length
-    Serial.println("OK"); // why isn't it printing this?
+//    Serial.print("#");Serial.print(radio.SENDERID);Serial.print(" ");
+//    Serial.print((char*)radio.DATA);
+//    Serial.print(" #RX:");Serial.print(radio.RSSI);
+
+    if (radio.ACKRequested())
+    {
+      radio.sendACK();
+    }
   }
-//  radio.send(RECEIVER, radiopacket, strlen(radiopacket));
+}
 
-  radio.receiveDone(); //put radio in RX mode
-  Serial.flush(); //make sure all serial data is clocked out before sleeping the MCU
+void setup() {
+  startup();
+  STATE=NORMAL;
+}
 
-  delay(20);  // Wait 1 second between transmits, could also 'sleep' here!
+void loop() {
+
+  if (Serial.available()) {
+    if (Serial.read() == 'r') {
+      Serial.println("attempting restart");
+      Serial.flush();
+      delay(20);
+
+//      dataFile.close();
+      
+      STATE = INIT;
+      
+    }
+  }
+
+  if (STATE == INIT) {
+    startup();
+    STATE = NORMAL;
+  } else if (STATE == NORMAL) {
+    errorCheckandRecover();
+    displayStatus();
+    
+    // get time
+    DateTime now = rtc.now();
+    //format a data string
+    dataString = "N" + String(NODEID) + " " + String(now.hour()) + ":" + String(now.minute()) + ":" + String(now.second());
+    
+    // Possible vector values can be:
+    // - VECTOR_ACCELEROMETER - m/s^2
+    // - VECTOR_MAGNETOMETER  - uT
+    // - VECTOR_GYROSCOPE     - rad/s
+    // - VECTOR_EULER         - degrees
+    // - VECTOR_LINEARACCEL   - m/s^2
+    // - VECTOR_GRAVITY       - m/s^2
+    
+    imu::Vector<3> linearAccel = bno.getVector(Adafruit_BNO055::VECTOR_LINEARACCEL);
+    imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
+  
+    dataString += " #xyz: " + String(linearAccel.x()) + "," + String(linearAccel.y()) + "," + String(linearAccel.z()) + " #ypr: " + String(euler.x()) + "," + String(euler.y()) + "," + String(euler.z());
+  
+    //write to SD
+    writeToSD(dataString);
+//    Serial.println(dataString);
+      
+    char radiopacket[60];
+    dataString.toCharArray(radiopacket,60);//"Hello World #";
+    
+    if (radio.sendWithRetry(RECEIVER, radiopacket, strlen(radiopacket))) { //target node Id, message as string or byte array, message length
+      Serial.println("OK"); // why isn't it printing this?
+    }
+  //  radio.send(RECEIVER, radiopacket, strlen(radiopacket));
+  
+//    radio.receiveDone(); //put radio in RX mode
+    checkRadio();
+    
+    Serial.flush(); //make sure all serial data is clocked out before sleeping the MCU
+
+    watchdog_triggered = millis();
+  }
+
+//  if (millis() - watchdog_triggered > watchdog_timeout) {
+//      Serial.println("#watchdog reset triggered... restarting");
+//      Serial.flush();
+//      delay(10);
+//      STATE = INIT;
+//    }
+  
+  delay(20);
 }
