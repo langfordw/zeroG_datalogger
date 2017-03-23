@@ -65,7 +65,7 @@ RFM69 radio = RFM69(RFM69_CS, RFM69_IRQ, IS_RFM69HCW, RFM69_IRQN);
 
 void writeToSD(String data) {
   if (!sd_error) {
-    File dataFile = SD.open("datalog.txt", FILE_WRITE);
+    File dataFile = SD.open("datalog2.txt", FILE_WRITE);
   
     // if the file is available, write to it:
     if (dataFile) {
